@@ -11,7 +11,7 @@ repmat = function(X,m,n){
 priors<-list()
 priors$aL=1
 priors$bL=1 #lambda0, baseline rate
-priors$aD=rep(0,1,7)+5 #day effect dirichlet params
+priors$aD=matrix(0,1,7)+5 #day effect dirichlet params
 priors$aH=matrix(0,nrow=48,ncol=7)+1 #time of day effect dirichlet param
 priors$z01=.01*10000
 priors$z00=.99*10000   #z(t) event process
@@ -30,7 +30,7 @@ sensorMMPP <- function(N,priors,ITERS,events,EQUIV){
   
   Niter<-ITERS[1]
   Nburn<-ITERS[2]
-  #Nplot<-ITERS[3]
+  Nplot<-ITERS[3]
   
   Z<-matrix(0,dim(N)[1],dim(N)[2])
   N0<-pmax(N,1)
@@ -58,11 +58,12 @@ sensorMMPP <- function(N,priors,ITERS,events,EQUIV){
     samples$NE<-array(0,dim=c(dim(NE)[1],dim(NE)[2],Niter))
   
   
-  samples$logp_NgLM<-rep(0,1,50)
-  samples$logp_NgLZ<-rep(0,1,50)
+  samples$logp_NgLM<-matrix(0,1,50)
+  samples$logp_NgLZ<-matrix(0,1,50)
   
 ######### MAIN LOOP: MCMC FOR INFERENCE  ###########
 for (iter in 1:Niter+Nburn){
+print(iter)
 L <- draw_L_N0(N0,priors,EQUIV);
 c(Z,N0,NE) := draw_Z_NLM(N,L,M,priors); #requires ":=" hack
 M <- draw_M_Z(Z,priors);
@@ -82,18 +83,39 @@ samples$logp_NgLZ[iter-Nburn] = eval_N_LZ(N,L,Z,priors); #fix
 #if (mod(iter,Nplot)==0 && iter > Nburn) {
 #  mmppPlot(mean(samples.L(:,:,1:iter-Nburn),3), ...
 #           mean(samples.Z(:,:,1:iter-Nburn),3), N, events,101); figure(101); title('Posterior Averages');      
-c(logpC, logpGD, logpGDz) := logp(N,samples,priors,iter-Nburn,EQUIV);  
+c(logpC, logpGD, logpGDz) := logp(N,samples,priors,iter-Nburn,EQUIV)
 logpC=logpC/log(2)
 logpGD=logpGD/log(2)
 logpGDz=logpGDz/log(2) 
 #}
 samples$logpC = logpC
-samples$logpGD = logGD
+samples$logpGD = logpGD
 }
+
+
+return(samples)
 }
 
 
 #### various distribution functions
+dirpdf<-function(X,A){
+  k<-length(X)
+  if(k==1){
+    p<-1
+    return(p)
+  }
+  else{
+    logp=sum((A-1)*log(X))-sum(lgamma(A))+lgamma(sum(A))
+  
+  p<-exp(logp)  
+  return(p)
+}
+  }
+
+
+
+
+
 poisslnpdf<-function(X,L){  		
 lnp = -L -lgamma(X+1) +log(L)*X;
 }
@@ -115,66 +137,78 @@ loglikeP <- function (X,L){
 #pnbinom(q, size, prob, mu, lower.tail = TRUE, log.p = FALSE)
 
 draw_Z_NLM <- function(N,L,M,prior){
-N0 = N; NE = 0*N; Z=0*N; ep = 1e-50;
-
+N0 = N
+NE = 0*N
+Z=0*N
 ep=1e-50
 ######## FIRST SAMPLE Z, N0, NE:
 PRIOR <-M%^%100%*%as.vector(c(1,0))
-po <-matrix(0,2,length(N)); 
-p  <-matrix(0,2,length(N));
+po <-matrix(0,2,length(N)) 
+p  <-matrix(0,2,length(N))
 for (t in 1:length(N)){
 if (N[t]!=-1){
-  po[1,t] = dpois(N[t],L[t])+ep;
-  po[2,t] = sum(dpois(0:N[t],L[t])*dnbinom(rev(0:N[t]),priors$aE,priors$bE/(1+priors$bE)))+ep;
+  po[1,t] <- dpois(N[t],L[t])+ep;
+  po[2,t] <- sum(dpois(0:N[t],L[t])*dnbinom(rev(0:N[t]),priors$aE,priors$bE/(1+priors$bE)))+ep;
 }
-  else {po[1,t]=1; po[2,t]=1}
+  else {po[1,t]<-1
+        po[2,t]<-1}
 }
+
 # Compute forward (filtering) posterior marginals
-p[,1] = PRIOR*po[,1] 
-p[,1] =p[,1]/sum(p[,1]);
+p[,1] <- PRIOR*po[,1] 
+p[,1] <-p[,1]/sum(p[,1]);
 for (t in 2:length(N)){ 
-  p[,t] = (M%*%p[,t-1])*po[,t]
-  p[,t]=p[,t]/sum(p[,t])  
+  p[,t] <- (M%*%p[,t-1])*po[,t]
+  p[,t]<-p[,t]/sum(p[,t])  
 }
+
 
 # Do backward sampling
 for (t in rev(1:length(N))){
-if (runif(1) > p[1,t]){                          # if event at time t
-if (N[t]!=-1){
-  Z[t] = 1 
-# likelihood of all possible event/normal combinations (all
-# possible values of N(E)
-ptmp = log(dpois(0:N[t],L[t])) + log(dnbinom(rev(seq(0,N[t],1)),priors$aE,priors$bE/(1+priors$bE)))
-ptmp<-ptmp-max(ptmp)
-ptmp=exp(ptmp)
-ptmp=ptmp/sum(ptmp)
-N0[t] = min(which(cumsum(ptmp) >= runif(1)))-1; # draw sample of N0
-NE[t]=N[t]-N0[t]                       # and compute NE
-}
-else{
-Z[t]=1; N0[t]=rpois(1,L[t]); NE[t]=rnbinom(1,priors$aE,priors$bE/(1+priors$bE));
-}
-}
-                      
-else
-if (N[t]!=-1){
-Z[t] = 0; N0[t] = N[t]; NE[t]=0             # no event at time t
-}
-else{
-Z[t]=0; N0[t]=rpois(1,L[t]); NE[t]=0
+  if (runif(1) > p[1,t]){                          # if event at time t
+    if (N[t]!=-1){
+        Z[t] = 1 
+        # likelihood of all possible event/normal combinations (all possible values of N(E)
+        ptmp = log(dpois(0:N[t],L[t])) + log(dnbinom(rev(seq(0,N[t],1)),priors$aE,priors$bE/(1+priors$bE)))
+        ptmp<-ptmp-max(ptmp)
+        ptmp=exp(ptmp)
+        ptmp=ptmp/sum(ptmp)
+        N0[t] = min(which(cumsum(ptmp) >= runif(1)))-1; # draw sample of N0
+        NE[t]=N[t]-N0[t]                       # and compute NE
+    }
+  else{
+        Z[t]=1
+        N0[t]=rpois(1,L[t])
+        NE[t]=rnbinom(1,priors$aE,priors$bE/(1+priors$bE));
+      }
+  }                
+  else{
+    if (N[t]!=-1){
+      Z[t] = 0
+      N0[t] = N[t]
+      NE[t]=0             # no event at time t
+      }
+    else{
+      Z[t]=0
+      N0[t]=rpois(1,L[t])
+      NE[t]=0
+    }
 }
 
-ptmp = rep(0,2,1)
-ptmp[Z[t]+1] = 1;    # compute backward influence
+ptmp = matrix(0,2,1)
+ptmp[Z[t]+1] <- 1    # compute backward influence
 if (t>1) {
-  p[,t-1] = p[,t-1]%*%(M*ptmp) 
-  p[,t-1]= p[,t-1]/sum(p[,t-1])
+  p[,t-1] <- p[,t-1]*(t(M)%*%ptmp) 
+  p[,t-1] <- p[,t-1]/sum(p[,t-1])
   }
 }
+
  out<-list()
  out$Z<-Z
  out$N0<-N0
  out$NE<-NE
+ #out$p<-p
+ #out$po<-po
  return(out)
 }
 
@@ -202,7 +236,7 @@ L0 = (sum(N0)+prior$aL)/(length(N0)+prior$bL)
 }
 L = matrix(0,dim(N0)[1],dim(N0)[2]) + L0;
 # 2nd: DAY EFFECT
-D = rep(0,1,Nd)
+D = matrix(0,1,Nd)
 for(i in 1:length(D)){
 alpha =  sum(N0[,seq(i,dim(N0)[2],7)])+prior$aD[i];
 if (prior$MODE) 
@@ -212,7 +246,8 @@ else
 }
 # 3rd: TIME OF DAY EFFECT
 A = matrix(0,Nh,Nd);
-for (tau in 1:dim(A)[2]){
+
+for (tau in 1:(dim(A)[2])){
 for (i in 1:dim(A)[1]){
 alpha = sum(N0[i,seq(tau,dim(N0)[2],7)])+prior$aH[i]
 if (prior$MODE) 
@@ -238,9 +273,10 @@ D = D/mean(D)
 if(EQUIV[2]==1){
 A[,1:7] = repmat(matrix(rowMeans(A)),1,dim(A)[2])
 } else if (EQUIV[2]==2){
-A[,c(1,7)] = repmat(matrix(rowMeans(A[,c(1,7)])),1,2)
-A[,2:6]=repmat(rowMeans(A[,2:6]),1,5) 
-} else if(EQUIV[2]==3){ A=A
+A[,c(1,7)] <- repmat(matrix(rowMeans(A[,c(1,7)])),1,2)
+
+A[,2:6]<-repmat(matrix(rowMeans(A[,2:6])),1,5) 
+} else if(EQUIV[2]==3){ A<-A
 }
 
 for (tau in 1:dim(A)[2]){ 
@@ -275,10 +311,10 @@ logp<-function(N,samples,priors,iter,EQUIV){
   Lstar<-apply(samples$L,c(1,2),mean)
   Mstar<-apply(samples$M,c(1,2),mean)
   logp_LMgN<-matrix(0,1,iter)
-  logp_LM <- eval_L_N0(Lstar,0,priors,EQUIV)+eval_M_Z(M_star,0,priors)
+  logp_LM <- eval_L_N0(Lstar,vector(),priors,EQUIV)+eval_M_Z(Mstar,0,priors)
   logp_NgLM <- eval_N_LM(N,Lstar,Mstar,priors)
   for (ii in 1:iter){
-    logp_LMgN[ii]<-eval_L_n0(Lstar,samples$N0[[ii]],priors,EQUIV)+eval_M_Z()
+    logp_LMgN[ii]<-eval_L_N0(Lstar,samples$N0[,,ii],priors,EQUIV)+eval_M_Z(Mstar,samples$Z[,,ii],priors)
   }
   tmpm<-mean(exp(logp_LMgN))+tmpm
   logpC<-logp_NgLM+logp_LM-logp_LMgN #Chib estimate
@@ -311,8 +347,8 @@ eval_L_N0 <- function(L,N0,prior,EQUIV){  # evaluate p(L | N0)
 L0 = mean(L)
 Nd = 7
 Nh=dim(L)[1]
-A<-matrix(0,dim(L)[1],dim(L)[2])
-D<-vector()
+A<-matrix(0,Nh,Nd)
+D<-rep(NA,Nd)
 for (i in 1:Nd) {
   D[i] = mean(L[,i]/L0)
 }
@@ -322,17 +358,14 @@ for (i in 1:Nd){
   }
 }
 logp = 0;
-
 # ENFORCE PARAMETER SHARING
 paD<-prior$aD; 
 aD<-matrix(0,1,Nd); 
-paH<-prior$aH; 
+paH<-prior$aH;
+dim(paH)
 aH<-matrix(0,Nh,Nd);
-print(N0)
 if (length(N0)!=0){
   for (i in 1:Nd){
-    print(c(i,Nd))
-    print(dim(N0))
     aD[i] = sum(N0[,seq(i,dim(N0)[2],Nd)]) #fix this line
   }
 for (i in 1:Nd){
@@ -343,7 +376,9 @@ for (i in 1:Nd){
   }
   
 if (EQUIV[1]==1){ #d(t)
-D = sum(D); paD = sum(paD); aD=sum(aD)
+D = sum(D)
+paD = sum(paD)
+aD=sum(aD)
 } else if (EQUIV[1]==2){
 D = c(D[1]+D[7],sum(D[2:6])); 
 paD=c(paD[1]+paD[7],sum(paD[2:6]))
@@ -353,19 +388,24 @@ D=c(aD[1]+aD[7],sum(aD[2:6]));
 }
 
 if(EQUIV[2]==1){ # tau(t)
-A=sum(A,2)/Nd; aH=sum(aH,2); paH=sum(paH,2);
+A<-matrix(rowSums(A)/Nd)
+aH<-matrix(rowSums(aH))
+paH<-matrix(rowSums(paH))
 } else if(EQUIV[2]==2){
-A = c((A[,1]+A[,7])/2,sum(A[,2:6],2)/5); 
-aH = c(aH[,1]+aH[,7],sum(aH[,2:6],2)); 
-paH = c(paH[,1]+paH[,7],sum(paH[,2:6],2)); 
+A = matrix(c((A[,1]+A[,7])/2,rowSums(A[,2:6])/5))
+aH = matrix(c(aH[,1]+aH[,7],rowSums(aH[,2:6])))
+paH = matrix(c(paH[,1]+paH[,7],rowSums(paH[,2:6])))
 } else if(EQUIV[2]==3){
-  A=A; aH=aH; paH=paH;
+  A<-A
+  aH=aH
+  paH=paH
 }
 
-logp = logp + log(gampdf(L0,sum(sum(N0))+prior.aL,1/(numel(N0)+prior.bL)));
-logp = logp + dirlnpdf(D/Nd,aD + paD);
+logp = logp + log(pgamma(L0,sum(sum(N0))+prior$aL,1/(length(N0)+prior$bL)));
+logp = logp + log(dirpdf(D/Nd,aD + paD));
+
 for (i in 1:dim(A)[2]){
-logp = logp + dirlnpdf(A[,i]/Nh,aH[,i]+paH[,i])
+logp = logp + log(dirpdf(A[,i]/Nh,aH[,i]+paH[,i]))
 }
 return(logp)
 }
@@ -429,3 +469,14 @@ return(logp)
     do.call(`=`, list(lhs[[i]], rhs[[i]]), envir=frame)
   return(invisible(NULL)) }
      
+
+
+
+mmPPlot<-function(L,Z,N,TRUTH,FIG,RANGE){
+  if(!exists('RANGE')){
+    RANGE<-1:length(Z)
+  }
+  
+  
+  
+}
