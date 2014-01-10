@@ -1,4 +1,4 @@
 R-implemenation of Markov Modulated Poisson Process for unsupervised event detection in time series of counts data.
 
 
-Please see the associated tutorial <a href="test">here</a>.
+Please see the associated tutorial <a href="wgmueller1.github.io/MMPP_Tutorial">here</a>.
