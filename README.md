@@ -8,5 +8,13 @@ This requires the base installation of R and the following libraries:
 <li>MCMCPack
 </ul>
 
+<h3>Installation</h3>
+If R is installed 
+
+From the commmand line run:
+git clone https //github.com/giantoak/MMPP
+
+The source code is now available to be run via R.
+
 <h3>User guide</h3>
 Please see the associated tutorial <a href="http://giantoak.github.io/MMPP_Tutorial">here</a>.
