@@ -1,5 +1,6 @@
 <h3>Description</h3>
-This is an R-implementation of Markov Modulated Poisson Process for unsupervised event detection in time series of counts data.
+This is an R-implementation of Markov Modulated Poisson Process for unsupervised event detection in time series of counts data.  For a detailed description of the algorithm and user guide go <a href="http://giantoak.github.io/MMPP_Tutorial">here</a>.
+
 
 <h3>Requirements</h3>
 This requires the base installation of R and the following libraries:
