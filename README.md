@@ -10,10 +10,12 @@ This requires the base installation of R and the following libraries:
 </ul>
 
 <h3>Installation</h3>
-If R is installed 
+If R is installed, there are two options: 
 
 From the commmand line run:
 git clone https //github.com/giantoak/MMPP
+
+Alternatively, you can download the file MMPP.R directly from this webpage.
 
 The source code is now available to be run via R.
 
