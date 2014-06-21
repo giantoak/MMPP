@@ -3,10 +3,9 @@ This is an R-implementation of Markov Modulated Poisson Process for unsupervised
 
 
 <h3>Requirements</h3>
-This requires the base installation of R and the following libraries:
+This requires the base installation of R and the following library:
 <ul>
 <li>expm
-<li>MCMCPack
 </ul>
 
 <h3>Installation</h3>
