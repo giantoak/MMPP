@@ -1,4 +1,3 @@
-library(MCMCpack)
 library(expm)
 
 repmat = function(X,m,n){
