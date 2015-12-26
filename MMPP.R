@@ -381,7 +381,7 @@ aD=sum(aD)
 } else if (EQUIV[1]==2){
 D = c(D[1]+D[7],sum(D[2:6])); 
 paD=c(paD[1]+paD[7],sum(paD[2:6]))
-D=c(aD[1]+aD[7],sum(aD[2:6]));
+aD=c(aD[1]+aD[7],sum(aD[2:6]));
 } else if (EQUIV[1]==3){
   D = D; paD = paD; paH=paH;
 }
